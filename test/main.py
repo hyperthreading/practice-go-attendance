@@ -44,7 +44,7 @@ def test_health_check(context):
 
 
 def test_receive_slack_command(context):
-    response = requests.post(context.get("server_url", "") + "/command/attendance", json={
+    response = requests.post(context.get("server_url", "") + "/command/attendance", data={
         "token": "test-token",
         "team_id": "test-team-id",
         "team_domain": "test-team-domain",
