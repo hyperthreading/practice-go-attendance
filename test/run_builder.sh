@@ -1,0 +1,2 @@
+docker build -t go-attendance-test-builder -f ./build/test/builder.Dockerfile .
+docker run -it --rm --name go-attendance-test-builder -v /home/humelo/workspace/humelo/go-attendance/:/app go-attendance-test-builder

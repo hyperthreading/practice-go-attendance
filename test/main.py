@@ -1,22 +1,56 @@
+import subprocess
 import requests
-
+import os
+import time
 
 def run_process(cmd):
-    import subprocess
 
-    process = subprocess.Popen(cmd, shell=True)
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     return process
 
 
-def wait_process(process):
-    process.wait()
-    if process.returncode != 0:
+def wait_process(process: subprocess.Popen, raise_on_error=True):
+    out, err = process.communicate()
+    if raise_on_error and process.returncode != 0:
         raise Exception(f"Process failed with return code {process.returncode}")
+    return out, err
+
+
+def run_watch_process(context):
+    # check if the container is already running
+    watch_lock_path = os.path.join(os.path.dirname(__file__), "watch.lock")
+    running = False
+    with open(watch_lock_path, "a+") as f:
+        f.seek(0)
+        container_id = f.read()
+
+    container_id = container_id.strip()
+    if container_id:
+        cmd = f"docker inspect {container_id}"
+        process = run_process(cmd)
+        wait_process(process, raise_on_error=False)
+        running = process.returncode == 0
+    
+    if not running:
+    
+        cmd = "docker build -t go-builder -f ./build/test/builder.Dockerfile ."
+        wait_process(run_process(cmd))
+
+        cmd = "docker run -q -d --rm --name go-builder -v $(pwd):/app go-builder"
+        container_id = wait_process(run_process(cmd))[0].decode("utf-8").strip()
+        
+        with open(watch_lock_path, "w") as f:
+            f.write(container_id)
+    
+    cmd = f"docker logs -f {container_id}"
+    process = run_process(cmd)
+    context["build_log_process"] = process
 
 
 def setup(context):
+    run_watch_process(context)
     server_process = run_process(
-        "docker compose -f ./deploy/docker-compose.yaml up --build --wait -d"
+        "docker compose -f ./deploy/test/docker-compose.yaml up --wait -d"
     )
     wait_process(server_process)
     log_process = run_process("docker compose -f ./deploy/docker-compose.yaml logs -f")
@@ -24,9 +58,10 @@ def setup(context):
 
 
 def teardown(context):
-    cmd = run_process("docker compose -f ./deploy/docker-compose.yaml down")
+    cmd = run_process("docker compose -f ./deploy/test/docker-compose.yaml down")
     wait_process(cmd)
     context["log_process"].terminate()
+    context["build_log_process"].terminate()
 
 
 def test():
@@ -36,9 +71,9 @@ def test():
     try:
         test_health_check(context)
         test_fail_leave_before_attend(context)
-        reset_time()
+        reset_time(context)
         test_success_attend_and_leave(context)
-        reset_time()
+        reset_time(context)
     finally:
         teardown(context)
 

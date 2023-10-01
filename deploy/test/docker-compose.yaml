@@ -1,0 +1,15 @@
+services:
+  api:
+    build:
+      context: ../../
+      dockerfile: ./build/test/runner.Dockerfile
+    entrypoint: ["/app/bin/_test_api"]
+    volumes:
+      - ../../:/app
+    ports:
+      - 8080:8080
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 1s
+      timeout: 10s
+      retries: 10
