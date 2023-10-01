@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -8,9 +9,9 @@ import (
 )
 
 type AttendanceRecord struct {
-	UserID string `json:"user_id"`
-	Date   string `json:"date"`
-	Time   string `json:"time"`
+	UserID     string `json:"user_id"`
+	AttendedAt string `json:"attended_at"`
+	LeavedAt   string `json:"leaved_at"`
 }
 
 type SlackCommand struct {
@@ -27,10 +28,25 @@ type SlackCommand struct {
 	TriggerID   string `form:"trigger_id" binding:"required"`
 }
 
-var database = map[string][]AttendanceRecord{}
+var ISO8601 = "2006-01-02T15:04:05Z07:00"
 
-func getToday() string {
-	return "2023-01-01"
+var attendanceRecordByUserId = map[string][]AttendanceRecord{}
+
+var fixedTime time.Time
+
+func getTimeNow() time.Time {
+	if !fixedTime.IsZero() {
+		return time.Now()
+	}
+	return fixedTime
+}
+
+func fixTimeNow(t time.Time) {
+	fixedTime = t
+}
+
+func resetTimeNow() {
+	fixedTime = time.Time{}
 }
 
 func New() *gin.Engine {
@@ -40,38 +56,129 @@ func New() *gin.Engine {
 			"message": "ok",
 		})
 	})
-	r.GET("/ping", func(c *gin.Context) {
+
+	r.POST("/test/fix-time", func(c *gin.Context) {
+		data := struct {
+			Time string `json:"time"`
+		}{}
+		c.Bind(&data)
+
+		timeNow, err := time.Parse(ISO8601, data.Time)
+
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"message": fmt.Sprintf("Invalid time format (%v)", err),
+			})
+			return
+		}
+
+		fixTimeNow(timeNow)
+
 		c.JSON(http.StatusOK, gin.H{
-			"message": "pong",
+			"message": "ok",
 		})
 	})
-	r.POST("/command/attendance", func(c *gin.Context) {
+
+	r.POST("/test/reset-time", func(c *gin.Context) {
+		resetTimeNow()
+		c.JSON(http.StatusOK, gin.H{
+			"message": "ok",
+		})
+	})
+
+	r.POST("/command/attend", func(c *gin.Context) {
 		data := SlackCommand{}
 		c.Bind(&data)
 
-		now := time.Now()
-		today := now.Format("2006-01-02")
-		time := now.Format("15:04:05")
-		if _, ok := database[today]; !ok {
-			database[today] = []AttendanceRecord{}
-		}
-		database[today] = append(database[today], AttendanceRecord{
-			UserID: data.UserID,
-			Date:   today,
-			Time:   time,
-		})
+		if data.Text == "attend" {
 
-		response := gin.H{
-			"message": "ok",
-		}
-		response["data"] = database
+			userId := data.UserID
 
-		c.JSON(http.StatusOK, response)
+			if userId == "" {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{
+					"message": "Invalid user id",
+					"code":    "invalid_user_id",
+				})
+				return
+			}
+
+			if attendanceRecordByUserId[userId] == nil {
+				attendanceRecordByUserId[userId] = []AttendanceRecord{}
+			}
+
+			if len(attendanceRecordByUserId[userId]) > 0 {
+				lastAttendanceRecord := attendanceRecordByUserId[userId][len(attendanceRecordByUserId[userId])-1]
+				if lastAttendanceRecord.LeavedAt == "" {
+					c.JSON(http.StatusUnprocessableEntity, gin.H{
+						"message": "You have not leaved yet",
+						"code":    "not_leaved_yet",
+					})
+					return
+				}
+			}
+
+			attendanceRecord := AttendanceRecord{
+				UserID:     data.UserID,
+				AttendedAt: getTimeNow().Format(ISO8601),
+			}
+
+			attendanceRecordByUserId[userId] = append(attendanceRecordByUserId[userId], attendanceRecord)
+
+			response := gin.H{
+				"message": "ok",
+			}
+			response["data"] = attendanceRecordByUserId
+
+			c.JSON(http.StatusOK, response)
+		} else if data.Text == "leave" {
+			userId := data.UserID
+			if userId == "" {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{
+					"message": "Invalid user id",
+					"code":    "invalid_user_id",
+				})
+				return
+			}
+
+			if attendanceRecordByUserId[userId] == nil || len(attendanceRecordByUserId[userId]) == 0 {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{
+					"message": "You have not attended yet",
+					"code":    "not_attended_yet",
+				})
+				return
+			}
+
+			lastAttendanceRecord := attendanceRecordByUserId[userId][len(attendanceRecordByUserId[userId])-1]
+
+			if lastAttendanceRecord.LeavedAt != "" {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{
+					"message": "You have not attended yet",
+					"code":    "not_attended_yet",
+				})
+				return
+			}
+
+			lastAttendanceRecord.LeavedAt = getTimeNow().Format(ISO8601)
+
+			response := gin.H{
+				"message": "ok",
+			}
+			response["data"] = attendanceRecordByUserId
+
+			c.JSON(http.StatusOK, response)
+		} else {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"message": "Invalid command",
+				"code":    "invalid_command",
+			})
+		}
+
 	})
-	r.GET("/attendance/today", func(c *gin.Context) {
+
+	r.GET("/attendance/attended", func(c *gin.Context) {
 		today := time.Now().Format("2006-01-02")
 		c.JSON(http.StatusOK, gin.H{
-			"data": database[today],
+			"data": attendanceRecordByUserId[today],
 		})
 	})
 	return r
