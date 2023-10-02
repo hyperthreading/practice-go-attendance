@@ -9,9 +9,10 @@ import (
 )
 
 type AttendanceRecord struct {
-	UserID     string `json:"user_id"`
-	AttendedAt string `json:"attended_at"`
-	LeavedAt   string `json:"leaved_at"`
+	UserID     string `json:"userId"`
+	UserName   string `json:"userName"`
+	AttendedAt string `json:"attendedAt"`
+	LeavedAt   string `json:"leavedAt,omitempty"`
 }
 
 type SlackCommand struct {
@@ -28,14 +29,14 @@ type SlackCommand struct {
 	TriggerID   string `form:"trigger_id" binding:"required"`
 }
 
-var ISO8601 = "2006-01-02T15:04:05Z07:00"
+var RFC3339_LONGFORM = "2006-01-02T15:04:05Z07:00"
 
 var attendanceRecordByUserId = map[string][]AttendanceRecord{}
 
 var fixedTime time.Time
 
 func getTimeNow() time.Time {
-	if !fixedTime.IsZero() {
+	if fixedTime.IsZero() {
 		return time.Now()
 	}
 	return fixedTime
@@ -63,7 +64,7 @@ func New() *gin.Engine {
 		}{}
 		c.Bind(&data)
 
-		timeNow, err := time.Parse(ISO8601, data.Time)
+		timeNow, err := time.Parse(RFC3339_LONGFORM, data.Time)
 
 		if err != nil {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{
@@ -81,6 +82,13 @@ func New() *gin.Engine {
 
 	r.POST("/test/reset-time", func(c *gin.Context) {
 		resetTimeNow()
+		c.JSON(http.StatusOK, gin.H{
+			"message": "ok",
+		})
+	})
+
+	r.POST("/test/reset-database", func(c *gin.Context) {
+		attendanceRecordByUserId = map[string][]AttendanceRecord{}
 		c.JSON(http.StatusOK, gin.H{
 			"message": "ok",
 		})
@@ -119,7 +127,8 @@ func New() *gin.Engine {
 
 			attendanceRecord := AttendanceRecord{
 				UserID:     data.UserID,
-				AttendedAt: getTimeNow().Format(ISO8601),
+				UserName:   data.UserName,
+				AttendedAt: getTimeNow().Format(RFC3339_LONGFORM),
 			}
 
 			attendanceRecordByUserId[userId] = append(attendanceRecordByUserId[userId], attendanceRecord)
@@ -158,7 +167,7 @@ func New() *gin.Engine {
 				return
 			}
 
-			lastAttendanceRecord.LeavedAt = getTimeNow().Format(ISO8601)
+			lastAttendanceRecord.LeavedAt = getTimeNow().Format(RFC3339_LONGFORM)
 
 			response := gin.H{
 				"message": "ok",
@@ -175,10 +184,45 @@ func New() *gin.Engine {
 
 	})
 
-	r.GET("/attendance/attended", func(c *gin.Context) {
-		today := time.Now().Format("2006-01-02")
+	r.GET("/user_list/attended", func(c *gin.Context) {
+		params := c.Request.URL.Query()
+		date := params.Get("date")
+		if date == "" {
+			date = getTimeNow().Format("2006-01-02")
+		}
+		tz := params.Get("tz")
+		if tz == "" {
+			tz = "KST"
+		}
+		queryDateTime, err := time.Parse("2006-01-02 MST", date+" "+tz)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{
+				"message": fmt.Sprintf("Invalid date format (%v)", err),
+			})
+			return
+		}
+
+		attended_user_list := []AttendanceRecord{}
+
+		for _, attendanceRecords := range attendanceRecordByUserId {
+			for _, attendanceRecord := range attendanceRecords {
+				attendedAt, err := time.Parse(RFC3339_LONGFORM, attendanceRecord.AttendedAt)
+				if err != nil {
+					c.JSON(http.StatusUnprocessableEntity, gin.H{
+						"message": fmt.Sprintf("Invalid date format (%v)", err),
+					})
+					return
+				}
+				if attendedAt.Compare(queryDateTime) >= 0 {
+					attendanceRecord.AttendedAt = attendedAt.Format(RFC3339_LONGFORM)
+					attended_user_list = append(attended_user_list, attendanceRecord)
+				}
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
-			"data": attendanceRecordByUserId[today],
+			"message": "ok",
+			"data":    attended_user_list,
 		})
 	})
 	return r
