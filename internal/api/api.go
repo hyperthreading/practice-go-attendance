@@ -315,14 +315,6 @@ func New() *gin.Engine {
 				newRecords[index] = attendanceRecord
 			}
 			attendanceRecordByUserId[userId] = newRecords
-			// nextRecords := records[index:]
-			// fmt.Println(previouseRecords, attendanceRecord, nextRecords)
-			// attendanceRecordByUserId[userId] = append(previouseRecords, attendanceRecord)[:cap(records)]
-			// fmt.Println(newRecordList)
-			// fmt.Println(previouseRecords, attendanceRecord, nextRecords)
-			// newRecordList = append(newRecordList, nextRecords...)
-			// fmt.Println(previouseRecords, attendanceRecord, nextRecords)
-			// attendanceRecordByUserId[userId] = newRecordList
 
 			response := gin.H{
 				"message": "ok",
