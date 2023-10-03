@@ -17,9 +17,9 @@ class bcolors:
     UNDERLINE = "\033[4m"
 
 
-def run_process(cmd):
+def run_process(cmd, capture_output=True):
     process = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        cmd, stdout=subprocess.PIPE if capture_output else None, stderr=subprocess.PIPE if capture_output else None, shell=True
     )
     return process
 
@@ -79,7 +79,7 @@ def setup(context):
         "docker compose -f ./deploy/test/docker-compose.yaml up --wait -d"
     )
     wait_process(server_process)
-    log_process = run_process("docker compose -f ./deploy/docker-compose.yaml logs -f")
+    log_process = run_process("docker compose -f ./deploy/test/docker-compose.yaml logs -f", capture_output=False)
     context["log_process"] = log_process
 
 
@@ -236,7 +236,6 @@ def test_list_users_attended(context):
     # fix_time(context, "2021-01-01T18:00:00Z")
     response_list = list_users_attended(context, date="2021-01-01")
     assert_equal(response_list.status_code, 200, response_list.json()["message"])
-    print(response_list.json())
     assert_contains_all(
         response_list.json()["data"],
         [
@@ -263,14 +262,35 @@ def test_attend_in_specified_time(context):
     fix_time(context, "2021-01-01T12:00:00Z")
 
     response = attend(
-        context, user_id="test-user-id-1", name="test-user-name-1", text="attend 10:00"
+        context, user_id="test-user-id-1", user_name="test-user-name-1", text="add 10:00~19:00"
+    )
+    assert_equal(response.status_code, 200, response.json())
+
+    response = attend(
+        context, user_id="test-user-id-2", user_name="test-user-name-2", text="add 09:00~19:00"
     )
     assert_equal(response.status_code, 200)
 
     response = attend(
-        context, user_id="test-user-id-2", name="test-user-name-2", text="attend 9:00"
+        context, user_id="test-user-id-2", user_name="test-user-name-2", text="add 2020-12-31 10:00~19:00"
     )
-    assert_equal(response.status_code, 200)
+    assert_equal(response.status_code, 200, response.json())
+
+# check in the attendance list
+    response_list = list_users_attended(context, date="2020-12-31")
+    assert_equal(response_list.status_code, 200)
+    assert_contains_all(
+        response_list.json()["data"],
+        [
+            {
+                "userId": "test-user-id-2",
+                "userName": "test-user-name-2",
+                "attendedAt": "2020-12-31T10:00:00Z",
+                "leftAt": "2020-12-31T19:00:00Z",
+            },
+        ],
+    )
+
 
     # check in the attendance list
     response_list = list_users_attended(context, date="2021-01-01")
@@ -282,11 +302,13 @@ def test_attend_in_specified_time(context):
                 "userId": "test-user-id-2",
                 "userName": "test-user-name-2",
                 "attendedAt": "2021-01-01T09:00:00Z",
+                "leftAt": "2021-01-01T19:00:00Z",
             },
             {
                 "userId": "test-user-id-1",
                 "userName": "test-user-name-1",
                 "attendedAt": "2021-01-01T10:00:00Z",
+                "leftAt": "2021-01-01T19:00:00Z",
             },
         ],
     )
