@@ -280,21 +280,27 @@ func New() *gin.Engine {
 				// check whether target time is between the previous record and the current record
 				if index > 0 {
 					prevAttendanceRecord := records[index-1]
-					if prevAttendanceRecord.LeftAt != "" {
-						prevLeftAt, err := time.Parse(RFC3339_LONGFORM, prevAttendanceRecord.LeftAt)
-						if err != nil {
-							c.JSON(http.StatusUnprocessableEntity, gin.H{
-								"message": fmt.Sprintf("Invalid date format (%v)", err),
-							})
-							return
-						}
-						if prevLeftAt.Compare(attendedAt) > 0 {
-							c.JSON(http.StatusUnprocessableEntity, gin.H{
-								"message": "You can not attend while you are attending",
-								"code":    "invalid_date",
-							})
-							return
-						}
+					if prevAttendanceRecord.LeftAt == "" {
+						c.JSON(http.StatusUnprocessableEntity, gin.H{
+							"message": "You can not attend while you are attending",
+							"code":    "invalid_date",
+						})
+						return
+					}
+
+					prevLeftAt, err := time.Parse(RFC3339_LONGFORM, prevAttendanceRecord.LeftAt)
+					if err != nil {
+						c.JSON(http.StatusUnprocessableEntity, gin.H{
+							"message": fmt.Sprintf("Invalid date format (%v)", err),
+						})
+						return
+					}
+					if prevLeftAt.Compare(attendedAt) > 0 {
+						c.JSON(http.StatusUnprocessableEntity, gin.H{
+							"message": "You can not attend while you are attending",
+							"code":    "invalid_date",
+						})
+						return
 					}
 				}
 			}
