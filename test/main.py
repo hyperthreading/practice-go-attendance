@@ -19,7 +19,10 @@ class bcolors:
 
 def run_process(cmd, capture_output=True):
     process = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE if capture_output else None, stderr=subprocess.PIPE if capture_output else None, shell=True
+        cmd,
+        stdout=subprocess.PIPE if capture_output else None,
+        stderr=subprocess.PIPE if capture_output else None,
+        shell=True,
     )
     return process
 
@@ -79,7 +82,10 @@ def setup(context):
         "docker compose -f ./deploy/test/docker-compose.yaml up --wait -d"
     )
     wait_process(server_process)
-    log_process = run_process("docker compose -f ./deploy/test/docker-compose.yaml logs -f", capture_output=False)
+    log_process = run_process(
+        "docker compose -f ./deploy/test/docker-compose.yaml logs -f",
+        capture_output=False,
+    )
     context["log_process"] = log_process
 
 
@@ -262,21 +268,30 @@ def test_attend_in_specified_time(context):
     fix_time(context, "2021-01-01T12:00:00Z")
 
     response = attend(
-        context, user_id="test-user-id-1", user_name="test-user-name-1", text="add 10:00~19:00"
+        context,
+        user_id="test-user-id-1",
+        user_name="test-user-name-1",
+        text="add 10:00~19:00",
     )
     assert_equal(response.status_code, 200, response.json())
 
     response = attend(
-        context, user_id="test-user-id-2", user_name="test-user-name-2", text="add 09:00~19:00"
+        context,
+        user_id="test-user-id-2",
+        user_name="test-user-name-2",
+        text="add 09:00~19:00",
     )
     assert_equal(response.status_code, 200)
 
     response = attend(
-        context, user_id="test-user-id-2", user_name="test-user-name-2", text="add 2020-12-31 10:00~19:00"
+        context,
+        user_id="test-user-id-2",
+        user_name="test-user-name-2",
+        text="add 2020-12-31 10:00~19:00",
     )
     assert_equal(response.status_code, 200, response.json())
 
-# check in the attendance list
+    # check in the attendance list
     response_list = list_users_attended(context, date="2020-12-31")
     assert_equal(response_list.status_code, 200)
     assert_contains_all(
@@ -290,7 +305,6 @@ def test_attend_in_specified_time(context):
             },
         ],
     )
-
 
     # check in the attendance list
     response_list = list_users_attended(context, date="2021-01-01")
