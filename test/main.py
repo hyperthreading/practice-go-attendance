@@ -164,7 +164,7 @@ def leave(context, **kwargs):
 
 def list_users_attended(context, **kwargs):
     data = {
-        "tz": "KST",
+        "tz": "+09:00",
     }
     data.update(kwargs)
     return requests.get(
@@ -228,6 +228,10 @@ def test_multiple_users_attend(context):
 
 
 def test_list_users_attended(context):
+    fix_time(context, "2021-01-01T07:00:00Z")
+
+    response = attend(context, user_id="test-user-id-0", user_name="test-user-name-0")
+
     fix_time(context, "2021-01-01T09:00:00Z")
 
     response = attend(context, user_id="test-user-id-1", user_name="test-user-name-1")
@@ -239,16 +243,26 @@ def test_list_users_attended(context):
     response = attend(context, user_id="test-user-id-3", user_name="test-user-name-3")
     assert_equal(response.status_code, 200)
 
-    # fix_time(context, "2021-01-01T18:00:00Z")
-    response_list = list_users_attended(context, date="2021-01-01")
+    fix_time(context, "2021-01-01T18:00:00Z")
+    response_leave = leave(context, user_id="test-user-id-1")
+    assert_equal(response_leave.status_code, 200)
+
+    response_list = list_users_attended(context, date="2021-01-01", tz="-09:00")
     assert_equal(response_list.status_code, 200, response_list.json()["message"])
     assert_contains_all(
         response_list.json()["data"],
         [
+            # This poor user should be included since he attended before 9:00
+            {
+                "userId": "test-user-id-0",
+                "userName": "test-user-name-0",
+                "attendedAt": "2021-01-01T07:00:00Z",
+            },
             {
                 "userId": "test-user-id-1",
                 "userName": "test-user-name-1",
                 "attendedAt": "2021-01-01T09:00:00Z",
+                "leftAt": "2021-01-01T18:00:00Z",
             },
             {
                 "userId": "test-user-id-2",

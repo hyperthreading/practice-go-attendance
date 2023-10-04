@@ -192,7 +192,7 @@ func New() *gin.Engine {
 				return
 			}
 
-			lastAttendanceRecord := attendanceRecordByUserId[userId][len(attendanceRecordByUserId[userId])-1]
+			lastAttendanceRecord := &attendanceRecordByUserId[userId][len(attendanceRecordByUserId[userId])-1]
 
 			if lastAttendanceRecord.LeftAt != "" {
 				c.JSON(http.StatusUnprocessableEntity, gin.H{
@@ -346,9 +346,9 @@ func New() *gin.Engine {
 		}
 		tz := params.Get("tz")
 		if tz == "" {
-			tz = "KST"
+			tz = "+09:00"
 		}
-		queryDateTime, err := time.Parse("2006-01-02 MST", date+" "+tz)
+		queryDateTime, err := time.Parse("2006-01-02 -07:00", date+" "+tz)
 		if err != nil {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{
 				"message": fmt.Sprintf("Invalid date format (%v)", err),
@@ -367,10 +367,20 @@ func New() *gin.Engine {
 					})
 					return
 				}
-				if attendedAt.Compare(queryDateTime) >= 0 {
-					attendanceRecord.AttendedAt = attendedAt.Format(RFC3339_LONGFORM)
+				if attendanceRecord.LeftAt == "" {
+					attended_user_list = append(attended_user_list, attendanceRecord)
+					continue
+				}
+				if err != nil {
+					c.JSON(http.StatusUnprocessableEntity, gin.H{
+						"message": fmt.Sprintf("Invalid date format (%v)", err),
+					})
+					return
+				}
+				if attendedAt.UTC().Compare(queryDateTime.UTC()) >= 0 {
 					attended_user_list = append(attended_user_list, attendanceRecord)
 				}
+
 			}
 		}
 
